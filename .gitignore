@@ -56,5 +56,3 @@ jest-results.json
 # Local storage
 /.vercel
 *.local
-
-/supabase

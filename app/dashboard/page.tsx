@@ -9,13 +9,13 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<any>(null)
   const [products, setProducts] = useState<any[]>([])
   const [orders, setOrders] = useState<any[]>([])
+  const [balance, setBalance] = useState(0)
   const [loading, setLoading] = useState(true)
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
-      // Auth guard — redirect to login if not logged in
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { window.location.href = '/login'; return }
 
@@ -30,13 +30,19 @@ export default function DashboardPage() {
 
       if (prods?.length) {
         const { data: ords } = await supabase
-          .from('orders').select('*, products(name)')
+          .from('orders')
+          .select('*, products(name)')
           .in('product_id', prods.map((p: any) => p.id))
           .eq('status', 'paid')
           .order('created_at', { ascending: false })
           .limit(20)
         setOrders(ords || [])
       }
+
+      // Get pending balance from ledger
+      const { data: bal } = await supabase
+        .rpc('get_seller_balance', { p_seller_id: user.id })
+      setBalance(bal || 0)
 
       setLoading(false)
     }
@@ -49,7 +55,6 @@ export default function DashboardPage() {
       .from('products')
       .update({ is_published: !product.is_published })
       .eq('id', product.id)
-
     if (!error) {
       setProducts(prev => prev.map(p =>
         p.id === product.id ? { ...p, is_published: !p.is_published } : p
@@ -66,7 +71,8 @@ export default function DashboardPage() {
     setDeletingId(null)
   }
 
-  const totalRevenue = orders.reduce((sum, o) => sum + o.amount, 0)
+  // Use seller_earning not amount — amount includes platform fee
+  const totalEarned = orders.reduce((sum, o) => sum + (o.seller_earning || 0), 0)
 
   if (loading) return (
     <div className="page">
@@ -109,25 +115,31 @@ export default function DashboardPage() {
         {/* ── Stats ──────────────────────────────────── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 40 }}>
           {[
-            { label: 'total revenue', value: formatINR(totalRevenue) },
-            { label: 'total sales', value: orders.length },
-            { label: 'products', value: products.length },
-            { label: 'published', value: products.filter(p => p.is_published).length },
-          ].map(({ label, value }) => (
+            { label: 'total earned', value: formatINR(totalEarned), sub: 'after platform fee' },
+            { label: 'pending balance', value: formatINR(balance), sub: 'awaiting payout' },
+            { label: 'total sales', value: orders.length, sub: 'paid orders' },
+            { label: 'products', value: `${products.filter(p => p.is_published).length}/${products.length}`, sub: 'published/total' },
+          ].map(({ label, value, sub }) => (
             <div key={label} className="card">
               <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, letterSpacing: '0.05em' }}>{label}</div>
-              <div style={{ fontFamily: 'var(--mono)', fontSize: 26, fontWeight: 700, color: 'var(--accent)' }}>{value}</div>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 24, fontWeight: 700, color: 'var(--accent)', marginBottom: 4 }}>{value}</div>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-dim)' }}>{sub}</div>
             </div>
           ))}
         </div>
 
         {/* ── Products ───────────────────────────────── */}
         <div style={{ marginBottom: 40 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 8, flexWrap: 'wrap' }}>
             <h2 style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--text-muted)', fontWeight: 400 }}>// products</h2>
-            <Link href="/dashboard/new-product">
-              <button className="btn-primary" style={{ fontSize: 12, padding: '8px 14px' }}>+ new product</button>
-            </Link>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Link href="/dashboard/payouts">
+                <button className="btn-ghost" style={{ fontSize: 12, padding: '8px 14px' }}>payouts ↗</button>
+              </Link>
+              <Link href="/dashboard/new-product">
+                <button className="btn-primary" style={{ fontSize: 12, padding: '8px 14px' }}>+ new product</button>
+              </Link>
+            </div>
           </div>
 
           {products.length === 0 ? (
@@ -150,7 +162,6 @@ export default function DashboardPage() {
                   gap: 12,
                   padding: '16px 20px',
                 }}>
-                  {/* Product info */}
                   <div style={{ flex: 1, minWidth: 200 }}>
                     <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{p.name}</div>
                     <div style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text-muted)' }}>
@@ -158,49 +169,36 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* Actions */}
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-
                     {/* Publish toggle */}
                     <div
                       onClick={() => !togglingId && togglePublish(p)}
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
+                        display: 'flex', alignItems: 'center', gap: 8,
                         padding: '6px 12px',
                         background: 'var(--surface-2)',
                         border: '1px solid var(--border)',
                         borderRadius: 6,
                         cursor: togglingId === p.id ? 'wait' : 'pointer',
-                        transition: 'opacity 0.15s',
                         opacity: togglingId === p.id ? 0.5 : 1,
+                        transition: 'opacity 0.15s',
                       }}
                     >
-                      {/* Toggle pill */}
                       <div style={{
-                        width: 32,
-                        height: 18,
-                        borderRadius: 9,
+                        width: 32, height: 18, borderRadius: 9,
                         background: p.is_published ? 'var(--accent)' : 'var(--border)',
-                        position: 'relative',
-                        transition: 'background 0.2s',
-                        flexShrink: 0,
+                        position: 'relative', transition: 'background 0.2s', flexShrink: 0,
                       }}>
                         <div style={{
-                          position: 'absolute',
-                          top: 2,
+                          position: 'absolute', top: 2,
                           left: p.is_published ? 14 : 2,
-                          width: 14,
-                          height: 14,
-                          borderRadius: '50%',
+                          width: 14, height: 14, borderRadius: '50%',
                           background: p.is_published ? '#000' : 'var(--text-dim)',
                           transition: 'left 0.2s',
                         }} />
                       </div>
                       <span style={{
-                        fontFamily: 'var(--mono)',
-                        fontSize: 11,
+                        fontFamily: 'var(--mono)', fontSize: 11,
                         color: p.is_published ? 'var(--accent)' : 'var(--text-dim)',
                         minWidth: 28,
                       }}>
@@ -208,23 +206,13 @@ export default function DashboardPage() {
                       </span>
                     </div>
 
-                    {/* Edit */}
                     <Link href={`/dashboard/edit/${p.id}`}>
-                      <button className="btn-ghost" style={{ padding: '6px 12px', fontSize: 12 }}>
-                        edit
-                      </button>
+                      <button className="btn-ghost" style={{ padding: '6px 12px', fontSize: 12 }}>edit</button>
                     </Link>
 
-                    {/* Delete */}
                     <button
                       className="btn-ghost"
-                      style={{
-                        padding: '6px 12px',
-                        fontSize: 12,
-                        color: '#f87171',
-                        borderColor: 'rgba(248,113,113,0.2)',
-                        opacity: deletingId === p.id ? 0.5 : 1,
-                      }}
+                      style={{ padding: '6px 12px', fontSize: 12, color: '#f87171', borderColor: 'rgba(248,113,113,0.2)', opacity: deletingId === p.id ? 0.5 : 1 }}
                       onClick={() => deleteProduct(p.id)}
                       disabled={deletingId === p.id}
                     >
@@ -244,13 +232,9 @@ export default function DashboardPage() {
           </h2>
           {orders.length === 0 ? (
             <div style={{
-              padding: '32px',
-              textAlign: 'center',
-              fontFamily: 'var(--mono)',
-              fontSize: 13,
-              color: 'var(--text-dim)',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
+              padding: '32px', textAlign: 'center',
+              fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--text-dim)',
+              border: '1px solid var(--border)', borderRadius: 8,
             }}>
               no sales yet — share your store link to get your first sale
             </div>
@@ -258,17 +242,10 @@ export default function DashboardPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {orders.map((o) => (
                 <div key={o.id} style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   padding: '12px 16px',
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  fontFamily: 'var(--mono)',
-                  fontSize: 13,
-                  flexWrap: 'wrap',
-                  gap: 8,
+                  background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8,
+                  fontFamily: 'var(--mono)', fontSize: 13, flexWrap: 'wrap', gap: 8,
                 }}>
                   <div>
                     <span style={{ color: 'var(--text-muted)' }}>{o.buyer_email}</span>
@@ -279,7 +256,15 @@ export default function DashboardPage() {
                     )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ color: 'var(--accent)', fontWeight: 700 }}>+{formatINR(o.amount)}</span>
+                    {/* Show seller_earning, not amount */}
+                    <span style={{ color: 'var(--accent)', fontWeight: 700 }}>
+                      +{formatINR(o.seller_earning || o.amount)}
+                    </span>
+                    {o.seller_earning && o.seller_earning !== o.amount && (
+                      <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>
+                        of {formatINR(o.amount)}
+                      </span>
+                    )}
                     <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>
                       {new Date(o.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                     </span>
