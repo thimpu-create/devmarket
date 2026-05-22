@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { getCategoryLabel } from '@/lib/categories'
 import { formatINR } from '@/lib/format'
 
 // Load Razorpay script
@@ -157,13 +158,24 @@ export default function ProductPage({
           <img src={product.cover_url} alt={product.name}
             style={{ width: '100%', height: 240, objectFit: 'cover', borderRadius: 6, marginBottom: 20 }} />
         )}
-        <div className="tag" style={{ marginBottom: 12 }}>digital product</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <span className="tag">{getCategoryLabel(product.category || 'other')}</span>
+          <span className="badge" style={{ fontSize: 11 }}>digital product</span>
+        </div>
         <h1 style={{ fontFamily: 'var(--sans)', fontSize: 32, fontWeight: 800, marginBottom: 12, letterSpacing: '-0.02em' }}>
           {product.name}
         </h1>
         <p style={{ fontFamily: 'var(--mono)', fontSize: 14, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24 }}>
           {product.description}
         </p>
+
+        {product.tech_stack?.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
+            {product.tech_stack.map((tech: string) => (
+              <span key={tech} className="badge">{tech}</span>
+            ))}
+          </div>
+        )}
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 20, borderTop: '1px solid var(--border)' }}>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 28, fontWeight: 700, color: 'var(--accent)' }}>

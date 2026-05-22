@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { CATEGORIES, TECH_STACK_OPTIONS } from '@/lib/categories'
 import Nav from '@/components/Nav'
 
 export default function EditProductPage({ params }: { params: { id: string } }) {
@@ -9,6 +10,8 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   const [price, setPrice] = useState('')
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [newCover, setNewCover] = useState<File | null>(null)
+  const [category, setCategory] = useState('other')
+  const [techStack, setTechStack] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
@@ -87,6 +90,8 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         slug,
         description,
         price: Math.round(priceNum * 100),
+        category,
+        tech_stack: techStack,
       }
       if (coverUrl) updateData.cover_url = coverUrl
 
@@ -224,6 +229,48 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                   drag & drop or click to upload cover image
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Category */}
+          <div>
+            {label('category')}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {CATEGORIES.map(c => (
+                <button key={c.value} type="button" onClick={() => setCategory(c.value)} style={{
+                  padding: '6px 14px', borderRadius: 6,
+                  border: `1px solid ${category === c.value ? 'var(--accent)' : 'var(--border)'}`,
+                  background: category === c.value ? 'var(--accent-dim)' : 'var(--surface)',
+                  color: category === c.value ? 'var(--accent)' : 'var(--text-muted)',
+                  fontFamily: 'var(--mono)', fontSize: 12, cursor: 'pointer', transition: 'all 0.15s',
+                }}>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tech stack */}
+          <div>
+            {label('tech stack')}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {TECH_STACK_OPTIONS.map(tech => {
+                const selected = techStack.includes(tech)
+                return (
+                  <button key={tech} type="button"
+                    onClick={() => setTechStack(prev => selected ? prev.filter(t => t !== tech) : [...prev, tech])}
+                    style={{
+                      padding: '5px 12px', borderRadius: 6,
+                      border: `1px solid ${selected ? 'var(--accent-border)' : 'var(--border)'}`,
+                      background: selected ? 'var(--accent-dim)' : 'transparent',
+                      color: selected ? 'var(--accent)' : 'var(--text-dim)',
+                      fontFamily: 'var(--mono)', fontSize: 11, cursor: 'pointer', transition: 'all 0.15s',
+                    }}
+                  >
+                    {selected ? '✓ ' : ''}{tech}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
