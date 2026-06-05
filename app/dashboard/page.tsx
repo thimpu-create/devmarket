@@ -103,13 +103,9 @@ export default function DashboardPage() {
               devmarket.in/{profile?.username} ↗
             </a>
           </div>
-          <button
-            className="btn-ghost"
-            style={{ fontSize: 12, padding: '8px 16px' }}
-            onClick={() => supabase.auth.signOut().then(() => window.location.href = '/')}
-          >
-            sign out
-          </button>
+          <Link href="/dashboard/settings">
+            <button className="btn-ghost" style={{ fontSize: 12, padding: '8px 16px' }}>settings</button>
+          </Link>
         </div>
 
         {/* ── Stats ──────────────────────────────────── */}
